@@ -62,11 +62,65 @@ public class Position
     }
 }
 
+public abstract class Command
+{
+    private readonly string _command;
+    private readonly Position _p;
 
+    protected Command(string command, Position p) 
+    {
+        _command = command;
+        _p = p;
+    }
+
+    public override string ToString() 
+    {
+        return $"{_command} {_p.ToString()}";
+    }
+}
+
+public class MoveCommand : Command
+{
+    public MoveCommand(Position p) : base("MOVE", p) {}   
+}
+
+public class UseCommand : Command
+{
+    public UseCommand(Position p) : base("USE", p) {}
+}
+
+public interface IGameAI 
+{
+    Command ComputeCommand();
+}
+
+public class GameAI : IGameAI
+{
+    private readonly Game _game;
+
+    public GameAI(Game game)
+    {
+        _game = game;
+    }
+
+    public Command ComputeCommand()
+    {
+        var myChef = _game.Players[0];
+        if (!myChef.Item?.HasPlate ?? false)
+            return new UseCommand(_game.Dishwasher.Position);
+        else if(!myChef.Item.Content.Contains("ICE_CREAM"))
+            return new UseCommand(_game.IceCream.Position);
+        else if(!myChef.Item.Content.Contains("BLUEBERRIES"))
+            return new UseCommand(_game.Blueberry.Position);
+            // once ready, go to customer window
+        else
+            return new UseCommand(_game.Window.Position);
+    }
+}
 
 public class MainClass
 {
-    public static bool Debug = true;
+    public static bool Debug = false;
     public const string Dish = "DISH";
 
     public static Game ReadGame(){
@@ -85,6 +139,8 @@ public class MainClass
                 if (kitchenLine[x] == '#') game.Tables.Add(new Table { Position = new Position(x, i) });
             }
         }
+
+
 
         return game;
     }
@@ -152,16 +208,12 @@ public class MainClass
                 int customerAward = int.Parse(inputs[1]);
             }
 
-            // GAME LOGIC
-            // fetch a dish, pick ice cream and drop the dish on an empty table
-            var myChef = game.Players[0];
-            if (!myChef.Item?.HasPlate ?? false)
-                Use(game.Dishwasher.Position);
-            else if(!myChef.Item.Content.Contains("ICE_CREAM"))
-                Use(game.IceCream.Position);
-            // once ready, put it on the first empty table for now
-            else
-                Use(game.Tables.First(t => t.Item == null).Position);
+            var gameAI = new GameAI(game);
+            var command = gameAI.ComputeCommand();
+
+            Console.WriteLine(command.ToString());
+
+
         }
     }
 }

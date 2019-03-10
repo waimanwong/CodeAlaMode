@@ -69,6 +69,11 @@ public class Table
     public Items Items;
 
     public bool HasItems => Items != null;
+
+    public override string ToString() 
+    {
+        return $"({Position.X},{Position.Y}) : {((Items == null) ? "" : Items.Content)}";
+    }
 }
 
 
@@ -143,10 +148,10 @@ public class GameAI : IGameAI
 
         int fromX = from.X;
         int fromY = from.Y;
-        
-        for(int x=-1; x<= 1; x++)
+        int radius = 2;
+        for(int x=-radius; x <= radius; x++)
         {
-            for(int y=-1; y <=1 ; y++)
+            for(int y=-radius; y <= radius ; y++)
             {
                 if(_game.TryGetTableAt(fromX + x, fromY + y, out Table neighborTable))
                 {
@@ -179,20 +184,41 @@ public class GameAI : IGameAI
                 var closestEmptyTable = GetClosestEmptyTable(myChef.Position);
                 return new UseCommand(closestEmptyTable.Position);
             }
-            
-                
         }
 
+        var lowestRewardOrder =_game.CustomerOrders.OrderBy(o => o.Reward).First();
+        var requiredItems = lowestRewardOrder.Items.Split('-');
 
-        if (!myChef.Items?.HasPlate ?? false)
-            return new UseCommand(_game.Dishwasher.Position);
-        else if(!myChef.Items.Content.Contains("ICE_CREAM"))
-            return new UseCommand(_game.IceCream.Position);
-        else if(!myChef.Items.Content.Contains("BLUEBERRIES"))
-            return new UseCommand(_game.Blueberry.Position);
-            // once ready, go to customer window
-        else
+        if(myChef.Items.Content == lowestRewardOrder.Items)
+        {
             return new UseCommand(_game.Window.Position);
+        }
+        else
+        {
+            foreach(var requiredItem in requiredItems)
+            {
+                if(myChef.Items.Content.Contains(requiredItem) == false)
+                {
+                    if(requiredItem == "DISH")
+                        return new UseCommand(_game.Dishwasher.Position);
+                    else if(requiredItem == "ICE_CREAM")
+                        return new UseCommand(_game.IceCream.Position);
+                    else if(requiredItem == "BLUEBERRIES")
+                        return new UseCommand(_game.Blueberry.Position);
+                    else if(requiredItem == "CHOPPED_STRAWBERRIES")
+                    {
+                        foreach(var t in _game.Tables)
+                        {
+                            MainClass.LogDebug(t.ToString());
+                        }    
+
+                        var targetTable =_game.Tables.First(t => t.HasItems && t.Items.Content == "CHOPPED_STRAWBERRIES");
+                        return new UseCommand(targetTable.Position);
+                    }
+                }
+            }
+        }
+        return new UseCommand(_game.Dishwasher.Position);
     }
 }
 
@@ -277,9 +303,12 @@ public class MainClass
             for (int i = 0; i < numTablesWithItems; i++)
             {
                 inputs = ReadLine().Split(' ');
-                if(game.TryGetTableAt(int.Parse(inputs[0]),int.Parse(inputs[1]), out Table table))
+                int x = int.Parse(inputs[0]);
+                int y = int.Parse(inputs[1]);
+                string content = inputs[2];
+                if(game.TryGetTableAt(x, y, out Table table))
                 {
-                    table.Items = new Items(inputs[2]);
+                    table.Items = new Items(content);
                 }
             }
 

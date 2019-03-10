@@ -5,44 +5,21 @@ using System.Text;
 using System.Collections;
 using System.Collections.Generic;
 
-public class Game
+#region almost stable
+public abstract class Command
 {
-    public Player[] Players = new Player[2];
-    public Table Dishwasher;
-    public Table Window;
-    public Table Blueberry;
-    public Table IceCream;
-    public List<Table> Tables = new List<Table>();
-}
+    private readonly string _command;
+    private readonly Position _p;
 
-public class Table
-{
-    public Position Position;
-    public bool HasFunction;
-    public Item Item;
-}
-
-public class Item
-{
-    public string Content;
-    public bool HasPlate;
-    public Item(string content){
-        Content = content;
-        HasPlate = Content.Contains(MainClass.Dish);
+    protected Command(string command, Position p) 
+    {
+        _command = command;
+        _p = p;
     }
-}
 
-public class Player
-{
-    public Position Position;
-    public Item Item;
-    public Player(Position position, Item item){
-        Position = position;
-        Item = item;
-    }
-    public void Update(Position position, Item item){
-        Position = position;
-        Item = item;
+    public override string ToString() 
+    {
+        return $"{_command} {_p.ToString()}";
     }
 }
 
@@ -62,22 +39,6 @@ public class Position
     }
 }
 
-public abstract class Command
-{
-    private readonly string _command;
-    private readonly Position _p;
-
-    protected Command(string command, Position p) 
-    {
-        _command = command;
-        _p = p;
-    }
-
-    public override string ToString() 
-    {
-        return $"{_command} {_p.ToString()}";
-    }
-}
 
 public class MoveCommand : Command
 {
@@ -87,6 +48,79 @@ public class MoveCommand : Command
 public class UseCommand : Command
 {
     public UseCommand(Position p) : base("USE", p) {}
+}
+#endregion
+
+public class CustomerOrder
+{
+    public string Items;
+    public int Reward;
+    public CustomerOrder(string items, int reward)
+    {
+        this.Items = items;
+        this.Reward = reward;
+    }
+}
+
+public class Table
+{
+    public Position Position;
+    public bool HasFunction;
+    public Items Items;
+
+    public bool HasItems => Items != null;
+}
+
+
+public class Player
+{
+    public Position Position;
+    public Items Items;
+    public Player(Position position, Items items){
+        Position = position;
+        Items = items;
+    }
+    public void Update(Position position, Items items){
+        Position = position;
+        Items = items;
+    }
+}
+
+public class Game
+{
+    public Player[] Players = new Player[2];
+    public Table Dishwasher;
+    public Table Window;
+    public Table ChoppingBoard;
+    public Table Blueberry;
+    public Table IceCream;
+    public Table Strawberry;
+
+    public List<Table> Tables = new List<Table>();
+
+    public List<CustomerOrder> CustomerOrders = new List<CustomerOrder>();
+
+    public void UpdateCustomerOrders(IEnumerable<CustomerOrder> customerOrders)
+    {
+        this.CustomerOrders.Clear();
+        this.CustomerOrders.AddRange(customerOrders);
+    }
+
+    public bool TryGetTableAt(int x, int y, out Table foundTable)
+    {
+        foundTable = Tables.SingleOrDefault(table => table.Position.X == x && table.Position.Y == y);
+        return foundTable != null;
+    }
+}
+
+public class Items
+{
+    public string Content;
+    public bool HasPlate;
+    public Items(string content){
+        Content = content;
+        HasPlate = Content.Contains(MainClass.Dish);
+    }
 }
 
 public interface IGameAI 
@@ -103,14 +137,58 @@ public class GameAI : IGameAI
         _game = game;
     }
 
+    private Table GetClosestEmptyTable(Position from)
+    {
+        MainClass.LogDebug("GetClosestEmptyTable");
+
+        int fromX = from.X;
+        int fromY = from.Y;
+        
+        for(int x=-1; x<= 1; x++)
+        {
+            for(int y=-1; y <=1 ; y++)
+            {
+                if(_game.TryGetTableAt(fromX + x, fromY + y, out Table neighborTable))
+                {
+                    if(neighborTable.HasFunction == false && neighborTable.HasItems == false)
+                    {
+                        return neighborTable;
+                    }
+                }
+            }
+        }
+        throw new ArgumentException();
+    }
+
     public Command ComputeCommand()
     {
         var myChef = _game.Players[0];
-        if (!myChef.Item?.HasPlate ?? false)
+
+        int requiredChoppedStrawBerries =_game.CustomerOrders.Count(order => order.Items.Contains("CHOPPED_STRAWBERRIES"));
+        int availableChoppedStrawberries = _game.Tables.Count(table => table.HasItems && table.Items.Content.Contains("CHOPPED_STRAWBERRIES"));
+
+        if(availableChoppedStrawberries < requiredChoppedStrawBerries)
+        {
+            //Let's chop some strawberries
+            if(myChef.Items.Content == "NONE")
+                return new UseCommand(_game.Strawberry.Position);
+            else if(myChef.Items.Content == "STRAWBERRIES")
+                return new UseCommand(_game.ChoppingBoard.Position);
+            else if(myChef.Items.Content == "CHOPPED_STRAWBERRIES")
+            {
+                var closestEmptyTable = GetClosestEmptyTable(myChef.Position);
+                return new UseCommand(closestEmptyTable.Position);
+            }
+            
+                
+        }
+
+
+        if (!myChef.Items?.HasPlate ?? false)
             return new UseCommand(_game.Dishwasher.Position);
-        else if(!myChef.Item.Content.Contains("ICE_CREAM"))
+        else if(!myChef.Items.Content.Contains("ICE_CREAM"))
             return new UseCommand(_game.IceCream.Position);
-        else if(!myChef.Item.Content.Contains("BLUEBERRIES"))
+        else if(!myChef.Items.Content.Contains("BLUEBERRIES"))
             return new UseCommand(_game.Blueberry.Position);
             // once ready, go to customer window
         else
@@ -120,7 +198,7 @@ public class GameAI : IGameAI
 
 public class MainClass
 {
-    public static bool Debug = false;
+    public static bool Debug = true;
     public const string Dish = "DISH";
 
     public static Game ReadGame(){
@@ -131,11 +209,14 @@ public class MainClass
         for (int i = 0; i < 7; i++)
         {
             string kitchenLine = ReadLine();
-            for (var x = 0; x < kitchenLine.Length; x++){
+            for (var x = 0; x < kitchenLine.Length; x++)
+            {
                 if (kitchenLine[x] == 'W') game.Window = new Table { Position = new Position(x, i), HasFunction = true };
                 if (kitchenLine[x] == 'D') game.Dishwasher = new Table { Position = new Position(x, i), HasFunction = true };
                 if (kitchenLine[x] == 'I') game.IceCream = new Table { Position = new Position(x, i), HasFunction = true };
                 if (kitchenLine[x] == 'B') game.Blueberry = new Table { Position = new Position(x, i), HasFunction = true };
+                if (kitchenLine[x] == 'S') game.Strawberry = new Table { Position = new Position(x, i), HasFunction = true };
+                if (kitchenLine[x] == 'C') game.ChoppingBoard = new Table { Position = new Position(x, i), HasFunction = true };
                 if (kitchenLine[x] == '#') game.Tables.Add(new Table { Position = new Position(x, i) });
             }
         }
@@ -145,19 +226,19 @@ public class MainClass
         return game;
     }
 
-    private static void Move(Position p) => Console.WriteLine("MOVE " + p);
-
-    private static void Use(Position p){
-        Console.WriteLine("USE " + p + "; C# Starter AI");
-    }
-
     private static string ReadLine(){
         var s = Console.ReadLine();
-        if (Debug)
-            Console.Error.WriteLine(s);
+        
+        LogDebug(s);
+
         return s;
     }
 
+    public static void LogDebug(string message)
+    {
+        if (Debug)
+            Console.Error.WriteLine(message);
+    }
 
     static void Main()
     {
@@ -181,32 +262,43 @@ public class MainClass
 
             // PLAYERS INPUT
             inputs = ReadLine().Split(' ');
-            game.Players[0].Update(new Position(int.Parse(inputs[0]), int.Parse(inputs[1])), new Item(inputs[2]));
+            game.Players[0].Update(new Position(int.Parse(inputs[0]), int.Parse(inputs[1])), new Items(inputs[2]));
             inputs = ReadLine().Split(' ');
-            game.Players[1].Update(new Position(int.Parse(inputs[0]), int.Parse(inputs[1])), new Item(inputs[2]));
+            game.Players[1].Update(new Position(int.Parse(inputs[0]), int.Parse(inputs[1])), new Items(inputs[2]));
 
             //Clean other tables
             foreach(var t in game.Tables){
-                t.Item = null;
+                t.Items = null;
             }
+
+            LogDebug("");
+            LogDebug("*** Tables with item ***");
             int numTablesWithItems = int.Parse(ReadLine()); // the number of tables in the kitchen that currently hold an item
             for (int i = 0; i < numTablesWithItems; i++)
             {
                 inputs = ReadLine().Split(' ');
-                var table = game.Tables.First(t => t.Position.X == int.Parse(inputs[0]) && t.Position.Y == int.Parse(inputs[1]));
-                table.Item = new Item(inputs[2]);
+                if(game.TryGetTableAt(int.Parse(inputs[0]),int.Parse(inputs[1]), out Table table))
+                {
+                    table.Items = new Items(inputs[2]);
+                }
             }
 
             inputs = ReadLine().Split(' ');
             string ovenContents = inputs[0]; // ignore until bronze league
             int ovenTimer = int.Parse(inputs[1]);
+
+            LogDebug("");
+            LogDebug("*** Customers are waiting ***");
             int numCustomers = int.Parse(ReadLine()); // the number of customers currently waiting for food
+            CustomerOrder[] customerOrders = new CustomerOrder[numCustomers];
             for (int i = 0; i < numCustomers; i++)
             {
                 inputs = ReadLine().Split(' ');
-                string customerItem = inputs[0];
-                int customerAward = int.Parse(inputs[1]);
+                string items = inputs[0];
+                int award = int.Parse(inputs[1]);
+                customerOrders[i] = new CustomerOrder(items, award);
             }
+            game.UpdateCustomerOrders(customerOrders);
 
             var gameAI = new GameAI(game);
             var command = gameAI.ComputeCommand();

@@ -100,6 +100,10 @@ public class Game
     public Table Blueberry;
     public Table IceCream;
     public Table Strawberry;
+    public Table Dough;
+    public Table Oven;
+
+    public string OventContents;
 
     public List<Table> Tables = new List<Table>();
 
@@ -165,8 +169,31 @@ public class GameAI : IGameAI
         throw new ArgumentException();
     }
 
-    public Command ComputeCommand()
+    private bool MayCookCroissant(out Command command)
     {
+        command = null;
+
+        var myChef = _game.Players[0];
+
+        int requiredCroissant =_game.CustomerOrders.Count(order => order.Items.Contains("CROISSANT"));
+        bool availableCroissant = _game.OventContents == "DOUGH" || _game.OventContents == "CROISSANT";
+
+        if(0 < requiredCroissant && availableCroissant == false)
+        {
+            //Let's cook croissant
+            if(myChef.Items.Content == "NONE")
+                command = new UseCommand(_game.Dough.Position);
+            else if(myChef.Items.Content == "DOUGH")
+                command = new UseCommand(_game.Oven.Position);
+        }
+
+        return command != null;
+    }
+
+    private bool MayChopStrawberries(out Command command) 
+    {
+        command = null;
+
         var myChef = _game.Players[0];
 
         int requiredChoppedStrawBerries =_game.CustomerOrders.Count(order => order.Items.Contains("CHOPPED_STRAWBERRIES"));
@@ -176,14 +203,26 @@ public class GameAI : IGameAI
         {
             //Let's chop some strawberries
             if(myChef.Items.Content == "NONE")
-                return new UseCommand(_game.Strawberry.Position);
+                command = new UseCommand(_game.Strawberry.Position);
             else if(myChef.Items.Content == "STRAWBERRIES")
-                return new UseCommand(_game.ChoppingBoard.Position);
+                command = new UseCommand(_game.ChoppingBoard.Position);
             else if(myChef.Items.Content == "CHOPPED_STRAWBERRIES")
             {
                 var closestEmptyTable = GetClosestEmptyTable(myChef.Position);
-                return new UseCommand(closestEmptyTable.Position);
+                command = new UseCommand(closestEmptyTable.Position);
             }
+        }
+
+        return command != null;
+    }
+
+    public Command ComputeCommand()
+    {
+        var myChef = _game.Players[0];
+
+        if(MayChopStrawberries(out Command command))
+        {
+            return command;
         }
 
         var lowestRewardOrder =_game.CustomerOrders.OrderBy(o => o.Reward).First();
@@ -207,13 +246,9 @@ public class GameAI : IGameAI
                         return new UseCommand(_game.Blueberry.Position);
                     else if(requiredItem == "CHOPPED_STRAWBERRIES")
                     {
-                        foreach(var t in _game.Tables)
-                        {
-                            MainClass.LogDebug(t.ToString());
-                        }    
-
-                        var targetTable =_game.Tables.First(t => t.HasItems && t.Items.Content == "CHOPPED_STRAWBERRIES");
-                        return new UseCommand(targetTable.Position);
+                        var targetTable =_game.Tables.FirstOrDefault(t => t.HasItems && t.Items.Content == "CHOPPED_STRAWBERRIES");
+                        if(targetTable != null)
+                            return new UseCommand(targetTable.Position);
                     }
                 }
             }
@@ -243,6 +278,8 @@ public class MainClass
                 if (kitchenLine[x] == 'B') game.Blueberry = new Table { Position = new Position(x, i), HasFunction = true };
                 if (kitchenLine[x] == 'S') game.Strawberry = new Table { Position = new Position(x, i), HasFunction = true };
                 if (kitchenLine[x] == 'C') game.ChoppingBoard = new Table { Position = new Position(x, i), HasFunction = true };
+                if (kitchenLine[x] == 'H') game.Dough = new Table { Position = new Position(x, i), HasFunction = true };
+                if (kitchenLine[x] == 'O') game.Oven = new Table { Position = new Position(x, i), HasFunction = true };
                 if (kitchenLine[x] == '#') game.Tables.Add(new Table { Position = new Position(x, i) });
             }
         }
@@ -315,6 +352,7 @@ public class MainClass
             inputs = ReadLine().Split(' ');
             string ovenContents = inputs[0]; // ignore until bronze league
             int ovenTimer = int.Parse(inputs[1]);
+            game.OventContents = ovenContents;
 
             LogDebug("");
             LogDebug("*** Customers are waiting ***");

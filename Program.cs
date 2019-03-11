@@ -11,13 +11,13 @@ public abstract class Command
     private readonly string _command;
     private readonly Position _p;
 
-    protected Command(string command, Position p) 
+    protected Command(string command, Position p)
     {
         _command = command;
         _p = p;
     }
 
-    public override string ToString() 
+    public override string ToString()
     {
         return $"{_command} {_p.ToString()}";
     }
@@ -26,7 +26,8 @@ public abstract class Command
 public class Position
 {
     public int X, Y;
-    public Position(int x, int y){
+    public Position(int x, int y)
+    {
         X = x;
         Y = y;
     }
@@ -42,12 +43,24 @@ public class Position
 
 public class MoveCommand : Command
 {
-    public MoveCommand(Position p) : base("MOVE", p) {}   
+    public MoveCommand(Position p) : base("MOVE", p) { }
 }
 
 public class UseCommand : Command
 {
-    public UseCommand(Position p) : base("USE", p) {}
+    public UseCommand(Position p) : base("USE", p) { }
+}
+
+public class WaitCommand : Command
+{
+    public WaitCommand() : base("WAIT", null)
+    {
+    }
+
+    public override string ToString()
+    {
+        return "WAIT";
+    }
 }
 #endregion
 
@@ -70,7 +83,7 @@ public class Table
 
     public bool HasItems => Items != null;
 
-    public override string ToString() 
+    public override string ToString()
     {
         return $"({Position.X},{Position.Y}) : {((Items == null) ? "" : Items.Content)}";
     }
@@ -81,11 +94,13 @@ public class Player
 {
     public Position Position;
     public Items Items;
-    public Player(Position position, Items items){
+    public Player(Position position, Items items)
+    {
         Position = position;
         Items = items;
     }
-    public void Update(Position position, Items items){
+    public void Update(Position position, Items items)
+    {
         Position = position;
         Items = items;
     }
@@ -126,13 +141,14 @@ public class Items
 {
     public string Content;
     public bool HasPlate;
-    public Items(string content){
+    public Items(string content)
+    {
         Content = content;
         HasPlate = Content.Contains(MainClass.Dish);
     }
 }
 
-public interface IGameAI 
+public interface IGameAI
 {
     Command ComputeCommand();
 }
@@ -148,20 +164,21 @@ public class GameAI : IGameAI
 
     private Table GetClosestEmptyTable(Position from)
     {
-        MainClass.LogDebug("GetClosestEmptyTable");
-
         int fromX = from.X;
         int fromY = from.Y;
-        int radius = 2;
-        for(int x=-radius; x <= radius; x++)
+
+        for (int radius = 1; radius <= 2; radius++)
         {
-            for(int y=-radius; y <= radius ; y++)
+            for (int x = -radius; x <= radius; x++)
             {
-                if(_game.TryGetTableAt(fromX + x, fromY + y, out Table neighborTable))
+                for (int y = -radius; y <= radius; y++)
                 {
-                    if(neighborTable.HasFunction == false && neighborTable.HasItems == false)
+                    if (_game.TryGetTableAt(fromX + x, fromY + y, out Table neighborTable))
                     {
-                        return neighborTable;
+                        if (neighborTable.HasFunction == false && neighborTable.HasItems == false)
+                        {
+                            return neighborTable;
+                        }
                     }
                 }
             }
@@ -175,38 +192,38 @@ public class GameAI : IGameAI
 
         var myChef = _game.Players[0];
 
-        int requiredCroissant =_game.CustomerOrders.Count(order => order.Items.Contains("CROISSANT"));
+        int requiredCroissant = _game.CustomerOrders.Count(order => order.Items.Contains("CROISSANT"));
         bool availableCroissant = _game.OventContents == "DOUGH" || _game.OventContents == "CROISSANT";
 
-        if(0 < requiredCroissant && availableCroissant == false)
+        if (0 < requiredCroissant && availableCroissant == false)
         {
             //Let's cook croissant
-            if(myChef.Items.Content == "NONE")
+            if (myChef.Items.Content == "NONE")
                 command = new UseCommand(_game.Dough.Position);
-            else if(myChef.Items.Content == "DOUGH")
+            else if (myChef.Items.Content == "DOUGH")
                 command = new UseCommand(_game.Oven.Position);
         }
 
         return command != null;
     }
 
-    private bool MayChopStrawberries(out Command command) 
+    private bool MayChopStrawberries(out Command command)
     {
         command = null;
 
         var myChef = _game.Players[0];
 
-        int requiredChoppedStrawBerries =_game.CustomerOrders.Count(order => order.Items.Contains("CHOPPED_STRAWBERRIES"));
+        int requiredChoppedStrawBerries = _game.CustomerOrders.Count(order => order.Items.Contains("CHOPPED_STRAWBERRIES"));
         int availableChoppedStrawberries = _game.Tables.Count(table => table.HasItems && table.Items.Content.Contains("CHOPPED_STRAWBERRIES"));
 
-        if(availableChoppedStrawberries < requiredChoppedStrawBerries)
+        if (requiredChoppedStrawBerries > 0 && availableChoppedStrawberries == 0)
         {
             //Let's chop some strawberries
-            if(myChef.Items.Content == "NONE")
+            if (myChef.Items.Content == "NONE")
                 command = new UseCommand(_game.Strawberry.Position);
-            else if(myChef.Items.Content == "STRAWBERRIES")
+            else if (myChef.Items.Content == "STRAWBERRIES")
                 command = new UseCommand(_game.ChoppingBoard.Position);
-            else if(myChef.Items.Content == "CHOPPED_STRAWBERRIES")
+            else if (myChef.Items.Content == "CHOPPED_STRAWBERRIES")
             {
                 var closestEmptyTable = GetClosestEmptyTable(myChef.Position);
                 command = new UseCommand(closestEmptyTable.Position);
@@ -220,40 +237,51 @@ public class GameAI : IGameAI
     {
         var myChef = _game.Players[0];
 
-        if(MayChopStrawberries(out Command command))
+        if (MayChopStrawberries(out Command chopStrawberryCommand))
         {
-            return command;
+            return chopStrawberryCommand;
+        }
+        if(MayCookCroissant(out Command croissantCommand))
+        {
+            return croissantCommand;
         }
 
-        var lowestRewardOrder =_game.CustomerOrders.OrderBy(o => o.Reward).First();
+        var lowestRewardOrder = _game.CustomerOrders.OrderBy(o => o.Reward).First();
         var requiredItems = lowestRewardOrder.Items.Split('-');
 
-        if(myChef.Items.Content == lowestRewardOrder.Items)
+        bool gatheredAllItems = true;
+        foreach (var requiredItem in requiredItems)
+        {
+            if (myChef.Items.Content.Contains(requiredItem) == false)
+            {
+                if (requiredItem == "DISH")
+                    return new UseCommand(_game.Dishwasher.Position);
+                else if (requiredItem == "ICE_CREAM")
+                    return new UseCommand(_game.IceCream.Position);
+                else if (requiredItem == "BLUEBERRIES")
+                    return new UseCommand(_game.Blueberry.Position);
+                else if (requiredItem == "CHOPPED_STRAWBERRIES")
+                {
+                    var targetTable = _game.Tables.FirstOrDefault(t => t.HasItems && t.Items.Content == "CHOPPED_STRAWBERRIES");
+                    if (targetTable != null)
+                        return new UseCommand(targetTable.Position);
+                }
+                else if (requiredItem == "CROISSANT")
+                {
+                    var targetTable = _game.Tables.FirstOrDefault(t => t.HasItems && t.Items.Content == "CROISSANT");
+                    if (targetTable != null)
+                        return new UseCommand(targetTable.Position);
+                }
+                gatheredAllItems = false;
+            }
+        }
+
+        if (gatheredAllItems)
         {
             return new UseCommand(_game.Window.Position);
         }
-        else
-        {
-            foreach(var requiredItem in requiredItems)
-            {
-                if(myChef.Items.Content.Contains(requiredItem) == false)
-                {
-                    if(requiredItem == "DISH")
-                        return new UseCommand(_game.Dishwasher.Position);
-                    else if(requiredItem == "ICE_CREAM")
-                        return new UseCommand(_game.IceCream.Position);
-                    else if(requiredItem == "BLUEBERRIES")
-                        return new UseCommand(_game.Blueberry.Position);
-                    else if(requiredItem == "CHOPPED_STRAWBERRIES")
-                    {
-                        var targetTable =_game.Tables.FirstOrDefault(t => t.HasItems && t.Items.Content == "CHOPPED_STRAWBERRIES");
-                        if(targetTable != null)
-                            return new UseCommand(targetTable.Position);
-                    }
-                }
-            }
-        }
-        return new UseCommand(_game.Dishwasher.Position);
+
+        return new WaitCommand();
     }
 }
 
@@ -262,7 +290,8 @@ public class MainClass
     public static bool Debug = true;
     public const string Dish = "DISH";
 
-    public static Game ReadGame(){
+    public static Game ReadGame()
+    {
         var game = new Game();
         game.Players[0] = new Player(null, null);
         game.Players[1] = new Player(null, null);
@@ -289,9 +318,10 @@ public class MainClass
         return game;
     }
 
-    private static string ReadLine(){
+    private static string ReadLine()
+    {
         var s = Console.ReadLine();
-        
+
         LogDebug(s);
 
         return s;
@@ -330,7 +360,8 @@ public class MainClass
             game.Players[1].Update(new Position(int.Parse(inputs[0]), int.Parse(inputs[1])), new Items(inputs[2]));
 
             //Clean other tables
-            foreach(var t in game.Tables){
+            foreach (var t in game.Tables)
+            {
                 t.Items = null;
             }
 
@@ -343,7 +374,7 @@ public class MainClass
                 int x = int.Parse(inputs[0]);
                 int y = int.Parse(inputs[1]);
                 string content = inputs[2];
-                if(game.TryGetTableAt(x, y, out Table table))
+                if (game.TryGetTableAt(x, y, out Table table))
                 {
                     table.Items = new Items(content);
                 }

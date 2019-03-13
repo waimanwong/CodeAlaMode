@@ -241,7 +241,7 @@ public class GameAI : IGameAI
         {
             return chopStrawberryCommand;
         }
-        if(MayCookCroissant(out Command croissantCommand))
+        if (MayCookCroissant(out Command croissantCommand))
         {
             return croissantCommand;
         }

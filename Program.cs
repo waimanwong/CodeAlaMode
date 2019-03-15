@@ -207,14 +207,16 @@ public class GameAI : IGameAI
                 var choppedDoughTable = _game.Tables.FirstOrDefault(t => t.HasItems && t.Items.Content == "CHOPPED_DOUGH");
                 var rawTartTable = _game.Tables.FirstOrDefault(t => t.HasItems && t.Items.Content == "RAW_TART");
 
-                if (rawTartTable != null)
+                if (_game.OventContents == "RAW_TART")
+                    command = new WaitCommand();
+                else if (_game.OventContents == "TART")
+                    command = new UseCommand(_game.Oven.Position);
+                else if (rawTartTable != null)
                     command = new UseCommand(rawTartTable.Position);
                 else if (choppedDoughTable != null)
                     command = new UseCommand(choppedDoughTable.Position);
                 else if (doughTable != null)
                     command = new UseCommand(doughTable.Position);
-                else if (_game.OventContents == "TART")
-                    command = new UseCommand(_game.Oven.Position);
                 else
                     command = new UseCommand(_game.Dough.Position);
             }
@@ -256,30 +258,38 @@ public class GameAI : IGameAI
 
         var myChef = _game.Players[0];
 
-        int requiredCroissant = _game.CustomerOrders.Count(order => order.Items.Contains("CROISSANT"));
-        bool availableCroissant = _game.OventContents == "DOUGH" || 
-                                    _game.OventContents == "CROISSANT" ||
-                                    _game.Tables.Any(table => table.HasItems && table.Items.Content.Contains("CROISSANT"));
+        int requiredCroissantCount = _game.CustomerOrders.Count(order => order.Items.Contains("CROISSANT"));
+        int availableCroissantCount = ((_game.OventContents == "DOUGH" || _game.OventContents == "CROISSANT") ? 1 : 0) +
+                                    _game.Tables.Count(table => table.HasItems && table.Items.Content.Contains("CROISSANT"));
+        int chefHoldingCroissant = _game.Players.Count(p => p.Items.Content.Contains("CROISSANT"));
 
-        if (0 < requiredCroissant && availableCroissant == false)
+        if (availableCroissantCount + chefHoldingCroissant < requiredCroissantCount)
         {
             MainClass.LogDebug("Let's cook a croissant");
 
             if (myChef.Items.Content == "NONE")
-                command = new UseCommand(_game.Dough.Position);
-            else if (myChef.Items.Content == "DOUGH")
             {
-                if (_game.OventContents == "NONE")
-                    command = new UseCommand(_game.Oven.Position);
-                else
-                {
-                    var closestEmptyTable = GetClosestEmptyTable(myChef.Position);
-                    command = new UseCommand(closestEmptyTable.Position);
-                }
-
-            }
+                command = new UseCommand(_game.Dough.Position);
+            }    
         }
-
+        if (myChef.Items.Content == "NONE")
+        {
+            if (_game.OventContents == "CROISSANT")
+                command = new UseCommand(_game.Oven.Position);
+        }
+        else if (myChef.Items.Content == "DOUGH")
+        {
+            if (_game.OventContents == "NONE")
+                command = new UseCommand(_game.Oven.Position);
+            else
+               command = new WaitCommand();
+        }
+        else if (myChef.Items.Content == "CROISSANT")
+        {
+            var closestEmptyTable = GetClosestEmptyTable(myChef.Position);
+            command = new UseCommand(closestEmptyTable.Position);
+        }
+        
         return command != null;
     }
 
@@ -291,30 +301,24 @@ public class GameAI : IGameAI
 
         int requiredChoppedStrawBerries = _game.CustomerOrders.Count(order => order.Items.Contains("CHOPPED_STRAWBERRIES"));
         int availableChoppedStrawberries = _game.Tables.Count(table => table.HasItems && table.Items.Content.Contains("CHOPPED_STRAWBERRIES"));
+        int chefHolding = _game.Players.Count( p => p.Items.Content.Contains("CHOPPED_STRAWBERRIES"));
 
-        if (requiredChoppedStrawBerries > 0 && availableChoppedStrawberries < requiredChoppedStrawBerries)
+        if (availableChoppedStrawberries + chefHolding < requiredChoppedStrawBerries)
         {
             MainClass.LogDebug("Let's chop some strawberries");
             
             if (myChef.Items.Content == "NONE")
                 command = new UseCommand(_game.Strawberry.Position);
-            else if (myChef.Items.Content == "STRAWBERRIES")
-                command = new UseCommand(_game.ChoppingBoard.Position);
-            else if (myChef.Items.Content == "CHOPPED_STRAWBERRIES")
-            {
-                var closestEmptyTable = GetClosestEmptyTable(myChef.Position);
-                command = new UseCommand(closestEmptyTable.Position);
-            }
-        }
-        else
-        {
-            if(myChef.Items.Content == "STRAWBERRIES")
-            {
-                var closestEmptyTable = GetClosestEmptyTable(myChef.Position);
-                command = new UseCommand(closestEmptyTable.Position);
-            }
         }
 
+        if (myChef.Items.Content == "STRAWBERRIES")
+            command = new UseCommand(_game.ChoppingBoard.Position);
+        else if (myChef.Items.Content == "CHOPPED_STRAWBERRIES")
+        {
+            var closestEmptyTable = GetClosestEmptyTable(myChef.Position);
+            command = new UseCommand(closestEmptyTable.Position);
+        }
+        
         return command != null;
     }
 
@@ -329,19 +333,22 @@ public class GameAI : IGameAI
     public Command ComputeCommand()
     {
         var myChef = _game.Players[0];
-        
+
+
         if (PrepareChopStrawberries(out Command chopStrawberryCommand))
         {
             return chopStrawberryCommand;
         }
+
         if (PrepareCroissant(out Command croissantCommand))
         {
             return croissantCommand;
         }
-        if(PrepareTart(out Command tartCommand))
-        {
-            return tartCommand;
-        }
+
+        //if (PrepareTart(out Command tartCommand))
+        //{
+        //    return tartCommand;
+        //}
 
         //MainClass.LogDebug("Let's prepare a customer order");
         //if (myChef.Items.Content == "NONE")

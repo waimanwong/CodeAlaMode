@@ -344,85 +344,212 @@ public class GameAI : IGameAI
             .Where(order => order.Items.StartsWith(myChefContent)).ToList();
     }
 
+    private bool AllIngredientsAreAvailable(CustomerOrder order, string myChefContent)
+    {
+        var items = order.Items.Split('-').ToList();
+        
+        var myChefContentItems = myChefContent.Split('-').ToList();
+        myChefContentItems.ForEach(i => items.Remove(i));
+
+        
+        foreach(var item in items)
+        {
+            
+            if(item == "CROISSANT" || item == "CHOPPED_STRAWBERRIES" || item == "TART")
+            {
+
+                if (_game.Tables.Any(table => table.HasItems && table.Items.Content == item) ||
+                    (_game.OventContents == item))
+                {
+                    //item available
+                }
+                else
+                {
+                    //Missing item
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    private List<CustomerOrder> GetCandidateCustomerOrders()
+    {
+        var customerOrders = _game.CustomerOrders;
+        var candidates = new List<CustomerOrder>();
+        var myChefContent = _game.Players[0].Items.Content;
+
+        foreach(var customerOrder in customerOrders)
+        {
+            if(AllIngredientsAreAvailable(customerOrder, myChefContent))
+            {
+                candidates.Add(customerOrder);
+            }
+        }
+
+        return candidates;
+    }
+
+    private bool MyChefContentMatchesExactly(CustomerOrder order, string[] items)
+    {
+        var orderItems = order.Items.Split('-').OrderBy(x => x).ToArray();
+        
+        if(orderItems.Length != items.Length)
+        {
+            return false;
+        }
+
+        var sortedItems = items.OrderBy(x => x).ToArray();
+
+        for(int i = 0; i < orderItems.Length; i++)
+        {
+            if (orderItems[i] != sortedItems[i])
+                return false;
+        }
+
+        return true;
+    }
+
+    private bool MyChefCompletedCustomerOrder(out Command finishComand)
+    {
+        finishComand = null;
+        var myChefContentItems = _game.Players[0].Items.Content.Split('-');
+
+        foreach(var customerOrder in _game.CustomerOrders)
+        {
+            if (MyChefContentMatchesExactly(customerOrder, myChefContentItems))
+                finishComand = new UseCommand(_game.Window.Position);
+        }
+
+        return finishComand != null;
+    }
+
+    private bool TryCompleteOrder(CustomerOrder candidateOrder, out Command command)
+    {
+        command = null;
+
+        var myChef = _game.Players[0];
+
+        if (myChef.Items.Content.Contains("DISH") == false)
+            command = new UseCommand(_game.Dishwasher.Position);
+        else
+        {
+            //All items
+            var remainingItems = candidateOrder.Items.Split('-').ToList();
+
+            //Remove already picked items
+            var myChefItems = myChef.Items.Content.Split('-').ToList();
+            myChefItems.ForEach(it => remainingItems.Remove(it));
+
+            foreach(var remainingItem in remainingItems)
+            {
+                if (remainingItem == "CROISSANT" || remainingItem == "TART" || remainingItem == "CHOPPED_STRAWBERRIES")
+                {
+                    var tableWithRemainingItem = _game.Tables.FirstOrDefault(table => table.HasItems && table.Items.Content == remainingItem);
+                    if (tableWithRemainingItem != null)
+                    {
+                        command = new UseCommand(tableWithRemainingItem.Position);
+                        break;
+                    }
+
+                    if (_game.OventContents == remainingItem)
+                    {
+                        command = new UseCommand(_game.Oven.Position);
+                        break;
+                    }
+                }
+                else if(remainingItem == "BLUEBERRIES")
+                {
+                    command = new UseCommand(_game.Blueberry.Position);
+                    break;
+                }
+                else if(remainingItem == "ICE_CREAM")
+                {
+                    command = new UseCommand(_game.IceCream.Position);
+                    break;
+                }
+            }
+        }
+
+
+        return command != null;
+    }
+
+    private bool MyChefIsHoldingIrrelevantStuff(CustomerOrder order, out Command command)
+    {
+        command = null;
+        
+        var myChef = _game.Players[0];
+
+        if (myChef.Items.Content != "NONE")
+        {
+            var myChefItems = myChef.Items.Content.Split('-');
+            var orderItems = order.Items.Split('-').ToHashSet();
+
+            foreach (var holdingItem in myChefItems)
+            {
+                if (orderItems.Contains(holdingItem) == false)
+                {
+                    var closestEmptyTable = GetClosestEmptyTable(myChef.Position);
+                    command = new UseCommand(closestEmptyTable.Position);
+                }
+            }
+        }
+
+        return command != null;
+    }
 
     public Command ComputeCommand()
     {
         var myChef = _game.Players[0];
 
-        if (PrepareChopStrawberries(out Command chopStrawberryCommand))
+        if (MyChefCompletedCustomerOrder(out Command finishCommand))
+            return finishCommand;
+
+        
+        var candidateOrders = GetCandidateCustomerOrders();
+        MainClass.LogDebug("*******************");
+        MainClass.LogDebug("CandidateOrders");
+        candidateOrders.ForEach(o => MainClass.LogDebug(o.Items));
+
+        if (candidateOrders.Count == 0)
         {
-            return chopStrawberryCommand;
-        }
-
-        if (PrepareCroissant(out Command croissantCommand))
-        {
-            return croissantCommand;
-        }
-
-        if (PrepareTart(out Command tartCommand))
-        {
-            return tartCommand;
-        }
-
-        MainClass.LogDebug("Let's prepare a customer order");
-        if (myChef.Items.Content == "NONE")
-        {
-            return new UseCommand(_game.Dishwasher.Position);
-        }
-
-        var completedOrder = _game.CustomerOrders.Any(order => order.Items == myChef.Items.Content);
-        if (completedOrder)
-        {
-            MainClass.LogDebug("Order completed");
-            return new UseCommand(_game.Window.Position);
-        }
-
-        var mychefContent = myChef.Items.Content;
-        var matchingOrders = GetMatchingCustomerOrders();
-
-        foreach (var matchingCustomerOrder in matchingOrders)
-        {
-            MainClass.LogDebug($"matchingCustomerOrder {matchingCustomerOrder.Items}");
-
-            var remainingItems = matchingCustomerOrder.Items.Replace(mychefContent + "-", "");
-
-            MainClass.LogDebug($"remainingItems {remainingItems}");
-
-            var tokens = remainingItems.Split('-');
-            var nextItem = tokens[0];
-
-            MainClass.LogDebug($"nextItem {nextItem}");
-
-            if (nextItem == "ICE_CREAM")
-                return new UseCommand(_game.IceCream.Position);
-            else if (nextItem == "BLUEBERRIES")
-                return new UseCommand(_game.Blueberry.Position);
-            else if (nextItem == "CHOPPED_STRAWBERRIES")
+            MainClass.LogDebug("Let's prepare a ingredient");
+            if (PrepareChopStrawberries(out Command chopStrawberryCommand))
             {
-                var targetTable = _game.Tables.FirstOrDefault(t => t.HasItems && t.Items.Content == "CHOPPED_STRAWBERRIES");
-                if (targetTable != null)
-                    return new UseCommand(targetTable.Position);
+                return chopStrawberryCommand;
             }
-            else if (nextItem == "CROISSANT")
+
+            if (PrepareCroissant(out Command croissantCommand))
             {
-                var targetTable = _game.Tables.FirstOrDefault(t => t.HasItems && t.Items.Content == "CROISSANT");
-                if (targetTable != null)
-                    return new UseCommand(targetTable.Position);
+                return croissantCommand;
             }
-            else if (nextItem == "TART")
+
+            if (PrepareTart(out Command tartCommand))
             {
-                var targetTable = _game.Tables.FirstOrDefault(t => t.HasItems && t.Items.Content == "TART");
-                if (targetTable != null)
-                    return new UseCommand(targetTable.Position);
+                return tartCommand;
             }
         }
+        
+        var candidateOrder = candidateOrders.FirstOrDefault();
+       
 
-        if (myChef.Items.Content != "NONE")
+        if (candidateOrder != null)
         {
-            var closestEmptyTable = GetClosestEmptyTable(myChef.Position);
-            return new UseCommand(closestEmptyTable.Position);
+            MainClass.LogDebug("*********");
+            MainClass.LogDebug($"Let's prepare a candidate customer order:{candidateOrder}");
+
+            if(MyChefIsHoldingIrrelevantStuff( candidateOrder, out Command dropCommand))
+            {
+                return dropCommand;
+            }
+
+            if (TryCompleteOrder(candidateOrder, out Command command))
+            {
+                return command;
+            }
         }
-    
         
         return new WaitCommand("DO NOT WHAT TO DO !!");
 

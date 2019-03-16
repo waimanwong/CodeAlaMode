@@ -10,6 +10,7 @@ public abstract class Command
 {
     private readonly string _command;
     private readonly Position _p;
+    private readonly string _message = string.Empty;
 
     protected Command(string command, Position p)
     {
@@ -17,9 +18,16 @@ public abstract class Command
         _p = p;
     }
 
+    protected Command(string command, Position p, string message)
+    {
+        _command = command;
+        _p = p;
+        _message = message;
+    }
+
     public override string ToString()
     {
-        return $"{_command} {_p.ToString()}";
+        return $"{_command} {_p.ToString()} {_message}";
     }
 }
 
@@ -48,7 +56,8 @@ public class MoveCommand : Command
 
 public class UseCommand : Command
 {
-    public UseCommand(Position p) : base("USE", p) { }
+    public UseCommand(Position p) : base("USE",p, string.Empty) { }
+    public UseCommand(Position p, string message) : base("USE", p, message) { }
 }
 
 public class WaitCommand : Command
@@ -344,7 +353,7 @@ public class GameAI : IGameAI
             .Where(order => order.Items.StartsWith(myChefContent)).ToList();
     }
 
-    private bool AllIngredientsAreAvailable(CustomerOrder order, string myChefContent)
+    private bool AllIngredientsAreAvailableOnTable(CustomerOrder order, string myChefContent, List<string> remainingItems)
     {
         var items = order.Items.Split('-').ToList();
         
@@ -354,14 +363,13 @@ public class GameAI : IGameAI
         
         foreach(var item in items)
         {
-            
             if(item == "CROISSANT" || item == "CHOPPED_STRAWBERRIES" || item == "TART")
             {
 
-                if (_game.Tables.Any(table => table.HasItems && table.Items.Content == item) ||
-                    (_game.OventContents == item))
+                if (remainingItems.Contains(item))
                 {
                     //item available
+                    remainingItems.Remove(item);
                 }
                 else
                 {
@@ -380,9 +388,14 @@ public class GameAI : IGameAI
         var candidates = new List<CustomerOrder>();
         var myChefContent = _game.Players[0].Items.Content;
 
-        foreach(var customerOrder in customerOrders)
+        var allIngredientsOnTable = _game.Tables
+            .Where(table => table.HasItems)
+            .Select(table => table.Items.Content)
+            .ToList();
+
+        foreach (var customerOrder in customerOrders)
         {
-            if(AllIngredientsAreAvailable(customerOrder, myChefContent))
+            if(AllIngredientsAreAvailableOnTable(customerOrder, myChefContent, allIngredientsOnTable))
             {
                 candidates.Add(customerOrder);
             }
@@ -431,20 +444,19 @@ public class GameAI : IGameAI
 
         var myChef = _game.Players[0];
 
-        if (myChef.Items.Content.Contains("DISH") == false)
-            command = new UseCommand(_game.Dishwasher.Position);
-        else
+        
+        //All items
+        var remainingItems = candidateOrder.Items.Split('-').ToList();
+
+        //Remove already picked items
+        var myChefItems = myChef.Items.Content.Split('-').ToList();
+        myChefItems.ForEach(it => remainingItems.Remove(it));
+
+        foreach(var remainingItem in remainingItems)
         {
-            //All items
-            var remainingItems = candidateOrder.Items.Split('-').ToList();
-
-            //Remove already picked items
-            var myChefItems = myChef.Items.Content.Split('-').ToList();
-            myChefItems.ForEach(it => remainingItems.Remove(it));
-
-            foreach(var remainingItem in remainingItems)
+            if (remainingItem == "CROISSANT" || remainingItem == "TART" || remainingItem == "CHOPPED_STRAWBERRIES")
             {
-                if (remainingItem == "CROISSANT" || remainingItem == "TART" || remainingItem == "CHOPPED_STRAWBERRIES")
+                if (myChef.Items.Content == "NONE")
                 {
                     var tableWithRemainingItem = _game.Tables.FirstOrDefault(table => table.HasItems && table.Items.Content == remainingItem);
                     if (tableWithRemainingItem != null)
@@ -459,20 +471,74 @@ public class GameAI : IGameAI
                         break;
                     }
                 }
-                else if(remainingItem == "BLUEBERRIES")
+                else
+                {
+                    if (remainingItems.Contains("DISH"))
+                    {
+                        command = new UseCommand(_game.Dishwasher.Position);
+                        break;
+                    }
+                    else
+                    {
+                        var tableWithRemainingItem = _game.Tables.FirstOrDefault(table => table.HasItems && table.Items.Content == remainingItem);
+                        if (tableWithRemainingItem != null)
+                        {
+                            command = new UseCommand(tableWithRemainingItem.Position);
+                            break;
+                        }
+
+                        if (_game.OventContents == remainingItem)
+                        {
+                            command = new UseCommand(_game.Oven.Position);
+                            break;
+                        }
+                    }
+                }
+            }
+            else if(remainingItem == "BLUEBERRIES")
+            {
+                if (myChef.Items.Content == "NONE")
                 {
                     command = new UseCommand(_game.Blueberry.Position);
                     break;
                 }
-                else if(remainingItem == "ICE_CREAM")
+                else
+                {
+                    if (remainingItems.Contains("DISH"))
+                    {
+                        command = new UseCommand(_game.Dishwasher.Position);
+                        break;
+                    }
+                    else
+                    {
+                        command = new UseCommand(_game.Blueberry.Position);
+                        break;
+                    }
+                }
+            }
+            else if(remainingItem == "ICE_CREAM")
+            {
+                if (myChef.Items.Content == "NONE")
                 {
                     command = new UseCommand(_game.IceCream.Position);
                     break;
                 }
+                else
+                {
+                    if (remainingItems.Contains("DISH"))
+                    {
+                        command = new UseCommand(_game.Dishwasher.Position);
+                        break;
+                    }
+                    else
+                    {
+                        command = new UseCommand(_game.IceCream.Position);
+                        break;
+                    }
+                }
             }
         }
-
-
+        
         return command != null;
     }
 
@@ -492,7 +558,7 @@ public class GameAI : IGameAI
                 if (orderItems.Contains(holdingItem) == false)
                 {
                     var closestEmptyTable = GetClosestEmptyTable(myChef.Position);
-                    command = new UseCommand(closestEmptyTable.Position);
+                    command = new UseCommand(closestEmptyTable.Position, "MyChefIsHoldingIrrelevantStuff");
                 }
             }
         }
@@ -538,7 +604,7 @@ public class GameAI : IGameAI
         if (candidateOrder != null)
         {
             MainClass.LogDebug("*********");
-            MainClass.LogDebug($"Let's prepare a candidate customer order:{candidateOrder}");
+            MainClass.LogDebug($"Let's prepare a candidate customer order:{candidateOrder.Items}");
 
             if(MyChefIsHoldingIrrelevantStuff( candidateOrder, out Command dropCommand))
             {
@@ -583,8 +649,6 @@ public class MainClass
                 if (kitchenLine[x] == '#') game.Tables.Add(new Table { Position = new Position(x, i) });
             }
         }
-
-
 
         return game;
     }

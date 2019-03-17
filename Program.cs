@@ -401,6 +401,32 @@ public class GameAI : IGameAI
             }
         }
 
+        //Check what the chef is preparing
+        //var otherChefContent = _game.Players[1].Items.Content;
+        //if(otherChefContent.Contains("DISH-"))
+        //{
+        //    var otherChefContentItems = otherChefContent.Split('-').ToHashSet();
+        //    foreach(var candidate in candidates.ToArray())
+        //    {
+        //        var candidateItems = candidate.Items.Split('-').ToHashSet();
+        //        var otherChefIsPreparing = true;
+        //        foreach(var otherChefItem in otherChefContentItems)
+        //        {
+        //            if(candidateItems.Contains(otherChefItem) == false)
+        //            {
+        //                otherChefIsPreparing = false;
+        //                break;
+        //            }
+        //        }
+
+        //        if( otherChefIsPreparing)
+        //        {
+        //            candidates.Remove(candidate);
+        //        }
+        //    }
+
+        //}
+
         return candidates;
     }
 
@@ -577,7 +603,7 @@ public class GameAI : IGameAI
         var candidateOrders = GetCandidateCustomerOrders();
         MainClass.LogDebug("*******************");
         MainClass.LogDebug("CandidateOrders");
-        candidateOrders.ForEach(o => MainClass.LogDebug(o.Items));
+        candidateOrders.ForEach(o => MainClass.LogDebug($"{o.Items}({o.Reward.ToString()}"));
 
         if (candidateOrders.Count == 0)
         {
@@ -597,8 +623,8 @@ public class GameAI : IGameAI
                 return tartCommand;
             }
         }
-        
-        var candidateOrder = candidateOrders.FirstOrDefault();
+
+        var candidateOrder = candidateOrders.OrderByDescending(o => o.Reward).FirstOrDefault();
        
 
         if (candidateOrder != null)

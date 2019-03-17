@@ -56,7 +56,7 @@ public class MoveCommand : Command
 
 public class UseCommand : Command
 {
-    public UseCommand(Position p) : base("USE",p, string.Empty) { }
+    public UseCommand(Position p) : base("USE", p, string.Empty) { }
     public UseCommand(Position p, string message) : base("USE", p, message) { }
 }
 
@@ -68,7 +68,7 @@ public class WaitCommand : Command
     {
     }
 
-    public WaitCommand(string message) :  base("WAIT", null)
+    public WaitCommand(string message) : base("WAIT", null)
     {
         _message = message;
     }
@@ -208,13 +208,13 @@ public class GameAI : IGameAI
 
         var myChef = _game.Players[0];
         int requiredTartCount = _game.CustomerOrders.Count(order => order.Items.Contains("TART"));
-        bool availableTartInOven = _game.OventContents == "TART";     
-        
-        int availableTartCount = 
-            (availableTartInOven ? 1 : 0) + 
-            _game.Tables.Count(table => table.HasItems && table.Items.Content.Contains("TART")) + 
+        bool availableTartInOven = _game.OventContents == "TART";
+
+        int availableTartCount =
+            (availableTartInOven ? 1 : 0) +
+            _game.Tables.Count(table => table.HasItems && table.Items.Content.Contains("TART")) +
             _game.Players.Count(p => p.Items.Content.Contains("-TART") || p.Items.Content == "TART");
-        
+
         MainClass.LogDebug($"Prepare Tart : {availableTartCount}/{requiredTartCount}");
 
         if (availableTartCount < requiredTartCount)
@@ -230,7 +230,7 @@ public class GameAI : IGameAI
                 }
             }
             else
-            { 
+            {
                 if (myChef.Items.Content == "NONE")
                     command = new UseCommand(_game.Dough.Position);
                 else if (myChef.Items.Content == "DOUGH")
@@ -254,7 +254,7 @@ public class GameAI : IGameAI
                 command = new UseCommand(closestEmptyTable.Position);
             }
         }
-        
+
 
         return command != null;
     }
@@ -266,7 +266,7 @@ public class GameAI : IGameAI
         var myChef = _game.Players[0];
 
         int requiredCroissantCount = _game.CustomerOrders.Count(order => order.Items.Contains("CROISSANT"));
-        int availableCroissantCount = _game.Tables.Count(table => table.HasItems && table.Items.Content.Contains("CROISSANT")) + 
+        int availableCroissantCount = _game.Tables.Count(table => table.HasItems && table.Items.Content.Contains("CROISSANT")) +
                                     _game.Players.Count(p => p.Items.Content.Contains("CROISSANT"));
 
         MainClass.LogDebug($"PrepareCroissant : {availableCroissantCount}/{requiredCroissantCount}");
@@ -310,8 +310,8 @@ public class GameAI : IGameAI
                 command = new UseCommand(closestEmptyTable.Position);
             }
         }
-       
-        
+
+
         return command != null;
     }
 
@@ -323,12 +323,12 @@ public class GameAI : IGameAI
 
         int requiredChoppedStrawBerries = _game.CustomerOrders.Count(order => order.Items.Contains("CHOPPED_STRAWBERRIES"));
         int availableChoppedStrawberries = _game.Tables.Count(table => table.HasItems && table.Items.Content.Contains("CHOPPED_STRAWBERRIES"));
-        int chefHolding = _game.Players.Count( p => p.Items.Content.Contains("CHOPPED_STRAWBERRIES"));
+        int chefHolding = _game.Players.Count(p => p.Items.Content.Contains("CHOPPED_STRAWBERRIES"));
 
         if (availableChoppedStrawberries + chefHolding < requiredChoppedStrawBerries)
         {
             MainClass.LogDebug("Let's chop some strawberries");
-            
+
             if (myChef.Items.Content == "NONE")
                 command = new UseCommand(_game.Strawberry.Position);
         }
@@ -340,7 +340,7 @@ public class GameAI : IGameAI
             var closestEmptyTable = GetClosestEmptyTable(myChef.Position);
             command = new UseCommand(closestEmptyTable.Position);
         }
-        
+
         return command != null;
     }
 
@@ -356,14 +356,14 @@ public class GameAI : IGameAI
     private bool AllIngredientsAreAvailableOnTable(CustomerOrder order, string myChefContent, List<string> remainingItems)
     {
         var items = order.Items.Split('-').ToList();
-        
+
         var myChefContentItems = myChefContent.Split('-').ToList();
         myChefContentItems.ForEach(i => items.Remove(i));
 
-        
-        foreach(var item in items)
+
+        foreach (var item in items)
         {
-            if(item == "CROISSANT" || item == "CHOPPED_STRAWBERRIES" || item == "TART")
+            if (item == "CROISSANT" || item == "CHOPPED_STRAWBERRIES" || item == "TART")
             {
 
                 if (remainingItems.Contains(item))
@@ -395,7 +395,7 @@ public class GameAI : IGameAI
 
         foreach (var customerOrder in customerOrders)
         {
-            if(AllIngredientsAreAvailableOnTable(customerOrder, myChefContent, allIngredientsOnTable))
+            if (AllIngredientsAreAvailableOnTable(customerOrder, myChefContent, allIngredientsOnTable))
             {
                 candidates.Add(customerOrder);
             }
@@ -433,15 +433,15 @@ public class GameAI : IGameAI
     private bool MyChefContentMatchesExactly(CustomerOrder order, string[] items)
     {
         var orderItems = order.Items.Split('-').OrderBy(x => x).ToArray();
-        
-        if(orderItems.Length != items.Length)
+
+        if (orderItems.Length != items.Length)
         {
             return false;
         }
 
         var sortedItems = items.OrderBy(x => x).ToArray();
 
-        for(int i = 0; i < orderItems.Length; i++)
+        for (int i = 0; i < orderItems.Length; i++)
         {
             if (orderItems[i] != sortedItems[i])
                 return false;
@@ -455,7 +455,7 @@ public class GameAI : IGameAI
         finishComand = null;
         var myChefContentItems = _game.Players[0].Items.Content.Split('-');
 
-        foreach(var customerOrder in _game.CustomerOrders)
+        foreach (var customerOrder in _game.CustomerOrders)
         {
             if (MyChefContentMatchesExactly(customerOrder, myChefContentItems))
                 finishComand = new UseCommand(_game.Window.Position);
@@ -470,7 +470,7 @@ public class GameAI : IGameAI
 
         var myChef = _game.Players[0];
 
-        
+
         //All items
         var remainingItems = candidateOrder.Items.Split('-').ToList();
 
@@ -478,7 +478,7 @@ public class GameAI : IGameAI
         var myChefItems = myChef.Items.Content.Split('-').ToList();
         myChefItems.ForEach(it => remainingItems.Remove(it));
 
-        foreach(var remainingItem in remainingItems)
+        foreach (var remainingItem in remainingItems)
         {
             if (remainingItem == "CROISSANT" || remainingItem == "TART" || remainingItem == "CHOPPED_STRAWBERRIES")
             {
@@ -521,7 +521,7 @@ public class GameAI : IGameAI
                     }
                 }
             }
-            else if(remainingItem == "BLUEBERRIES")
+            else if (remainingItem == "BLUEBERRIES")
             {
                 if (myChef.Items.Content == "NONE")
                 {
@@ -542,7 +542,7 @@ public class GameAI : IGameAI
                     }
                 }
             }
-            else if(remainingItem == "ICE_CREAM")
+            else if (remainingItem == "ICE_CREAM")
             {
                 if (myChef.Items.Content == "NONE")
                 {
@@ -564,14 +564,14 @@ public class GameAI : IGameAI
                 }
             }
         }
-        
+
         return command != null;
     }
 
     private bool MyChefIsHoldingIrrelevantStuff(CustomerOrder order, out Command command)
     {
         command = null;
-        
+
         var myChef = _game.Players[0];
 
         if (myChef.Items.Content != "NONE")
@@ -599,7 +599,7 @@ public class GameAI : IGameAI
         if (MyChefCompletedCustomerOrder(out Command finishCommand))
             return finishCommand;
 
-        
+
         var candidateOrders = GetCandidateCustomerOrders();
         MainClass.LogDebug("*******************");
         MainClass.LogDebug("CandidateOrders");
@@ -625,14 +625,14 @@ public class GameAI : IGameAI
         }
 
         var candidateOrder = candidateOrders.OrderByDescending(o => o.Reward).FirstOrDefault();
-       
+
 
         if (candidateOrder != null)
         {
             MainClass.LogDebug("*********");
             MainClass.LogDebug($"Let's prepare a candidate customer order:{candidateOrder.Items}");
 
-            if(MyChefIsHoldingIrrelevantStuff( candidateOrder, out Command dropCommand))
+            if (MyChefIsHoldingIrrelevantStuff(candidateOrder, out Command dropCommand))
             {
                 return dropCommand;
             }
@@ -642,7 +642,7 @@ public class GameAI : IGameAI
                 return command;
             }
         }
-        
+
         return new WaitCommand("DO NOT WHAT TO DO !!");
 
     }
